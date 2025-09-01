@@ -1,108 +1,244 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
-  <meta charset="UTF-8">
-  <title>CRUD User - Vue 2 + API</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CRUD User — Vue 2 + Tailwind CSS + MongoDB</title>
+  <!-- Tailwind CSS (Play CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind config (optional)
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              DEFAULT: '#2563eb',
+              50: '#eff6ff',
+              100: '#dbeafe',
+              200: '#bfdbfe',
+              300: '#93c5fd',
+              400: '#60a5fa',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          },
+          boxShadow: {
+            soft: '0 10px 30px -12px rgba(0,0,0,0.25)'
+          }
+        }
+      }
+    }
+  </script>
+  <!-- Vue 2 + Axios -->
   <script src="https://cdn.jsdelivr.net/npm/vue@2/dist/vue.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-    th, td { border: 1px solid #ccc; padding: 10px; text-align: left; }
-    th { background: #f5f5f5; }
-    input, button { margin: 5px 0; padding: 6px; }
-    .form-container { margin-bottom: 20px; }
-    .btn { cursor: pointer; padding: 6px 12px; border: none; border-radius: 4px; }
-    .btn-add { background: #28a745; color: white; }
-    .btn-edit { background: #007bff; color: white; }
-    .btn-delete { background: #dc3545; color: white; }
-  </style>
 </head>
-<body>
-  <div id="app">
-    <h2>CRUD User (Vue 2 + Node.js API)</h2>
+<body class="min-h-screen bg-gray-50 text-gray-800">
+  <div id="app" class="max-w-6xl mx-auto p-6">
+    <!-- Header -->
+    <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <h1 class="text-2xl sm:text-3xl font-bold">CRUD User</h1>
+        <p class="text-gray-500">Vue 2 + Tailwind CSS + REST API + MongoDB</p>
+      </div>
+      <div class="flex gap-2">
+        <input type="text" v-model.trim="search" placeholder="Cari nama/email…" class="w-56 px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <button @click="openCreate" class="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary-700 shadow-soft">+ Tambah User</button>
+      </div>
+    </header>
 
-    <!-- Form Tambah / Edit -->
-    <div class="form-container">
-      <input type="text" v-model="form.name" placeholder="Name">
-      <input type="email" v-model="form.email" placeholder="Email">
-      <input type="number" v-model="form.age" placeholder="Age">
-      <button class="btn btn-add" v-if="!isEdit" @click="addUser">Add User</button>
-      <button class="btn btn-edit" v-if="isEdit" @click="updateUser">Update User</button>
-      <button v-if="isEdit" @click="cancelEdit">Cancel</button>
+    <!-- Card -->
+    <section class="mt-6 bg-white rounded-2xl shadow-soft">
+      <div class="p-4 flex items-center justify-between border-b">
+        <div class="text-sm text-gray-500">Endpoint: <span class="font-mono text-gray-700">{{ apiUrl }}</span></div>
+        <button @click="fetchUsers" class="text-sm px-3 py-1 rounded-lg border hover:bg-gray-50">Reload</button>
+      </div>
+
+      <!-- Table Wrapper -->
+      <div class="overflow-x-auto">
+        <table class="min-w-full table-auto">
+          <thead class="bg-gray-100 text-gray-700">
+            <tr>
+              <th class="px-4 py-3 text-left text-sm font-semibold">Nama</th>
+              <th class="px-4 py-3 text-left text-sm font-semibold">Email</th>
+              <th class="px-4 py-3 text-left text-sm font-semibold">Umur</th>
+              <th class="px-4 py-3 text-left text-sm font-semibold">Dibuat</th>
+              <th class="px-4 py-3 text-right text-sm font-semibold">Aksi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="u in filteredUsers" :key="u._id" class="border-t hover:bg-gray-50">
+              <td class="px-4 py-3">
+                <div class="font-medium">{{ u.name }}</div>
+                <div class="text-xs text-gray-500 truncate max-w-[18rem]">ID: {{ u._id }}</div>
+              </td>
+              <td class="px-4 py-3">{{ u.email }}</td>
+              <td class="px-4 py-3">{{ u.age || 0 }}</td>
+              <td class="px-4 py-3 text-sm text-gray-500">{{ formatDate(u.createdAt) }}</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center justify-end gap-2">
+                  <button @click="openEdit(u)" class="px-3 py-1.5 rounded-lg border border-primary-200 text-primary-700 hover:bg-primary-50">Edit</button>
+                  <button @click="confirmDelete(u)" class="px-3 py-1.5 rounded-lg border border-red-200 text-red-700 hover:bg-red-50">Hapus</button>
+                </div>
+              </td>
+            </tr>
+            <tr v-if="!loading && filteredUsers.length === 0">
+              <td colspan="5" class="px-4 py-6 text-center text-gray-500">Belum ada data atau tidak ditemukan.</td>
+            </tr>
+            <tr v-if="loading">
+              <td colspan="5" class="px-4 py-6 text-center text-gray-500">Memuat data…</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Modal -->
+    <div v-if="showModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/40" @click="closeModal"></div>
+      <div class="relative w-full max-w-lg bg-white rounded-2xl shadow-soft p-6">
+        <h2 class="text-xl font-semibold mb-4" v-text="isEdit ? 'Edit User' : 'Tambah User'"></h2>
+        <form @submit.prevent="isEdit ? updateUser() : createUser()" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Nama</label>
+            <input v-model.trim="form.name" type="text" class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="Nama lengkap" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Email</label>
+            <input v-model.trim="form.email" type="email" class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="email@domain.com" required />
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Umur</label>
+            <input v-model.number="form.age" type="number" min="0" class="w-full px-3 py-2 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-500" placeholder="0" />
+          </div>
+          <div class="flex items-center justify-end gap-2 pt-2">
+            <button type="button" @click="closeModal" class="px-4 py-2 rounded-xl border">Batal</button>
+            <button type="submit" class="px-4 py-2 rounded-xl bg-primary text-white hover:bg-primary-700">{{ isEdit ? 'Simpan Perubahan' : 'Tambah' }}</button>
+          </div>
+        </form>
+      </div>
     </div>
 
-    <!-- Table Users -->
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th><th>Email</th><th>Age</th><th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="user in users" :key="user._id">
-          <td>{{ user.name }}</td>
-          <td>{{ user.email }}</td>
-          <td>{{ user.age }}</td>
-          <td>
-            <button class="btn btn-edit" @click="editUser(user)">Edit</button>
-            <button class="btn btn-delete" @click="deleteUser(user._id)">Delete</button>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+    <!-- Toast -->
+    <transition name="fade">
+      <div v-if="toast.show" class="fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-xl shadow-soft">
+        {{ toast.message }}
+      </div>
+    </transition>
   </div>
 
   <script>
     new Vue({
       el: '#app',
       data: {
+        apiUrl: 'http://localhost:1234/api/users', // ganti jika perlu
         users: [],
-        form: { name: '', email: '', age: '' },
+        loading: false,
+        search: '',
+        showModal: false,
         isEdit: false,
-        editId: null,
-        apiUrl: "http://localhost:1234/api/users"
+        currentId: null,
+        form: { name: '', email: '', age: null },
+        toast: { show: false, message: '' }
+      },
+      computed: {
+        filteredUsers() {
+          const q = this.search.toLowerCase();
+          return this.users.filter(u =>
+            !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+          );
+        }
       },
       mounted() {
-        this.getUsers();
+        this.fetchUsers();
       },
       methods: {
-        async getUsers() {
-          const res = await axios.get(this.apiUrl);
-          this.users = res.data;
-        },
-        async addUser() {
-          if (!this.form.name || !this.form.email) {
-            alert("Name & Email wajib diisi!");
-            return;
+        async fetchUsers() {
+          try {
+            this.loading = true;
+            const res = await axios.get(this.apiUrl, { withCredentials: false });
+            this.users = Array.isArray(res.data) ? res.data : [];
+          } catch (e) {
+            this.notify('Gagal memuat data. Periksa API & CORS.');
+            console.error(e);
+          } finally {
+            this.loading = false;
           }
-          await axios.post(this.apiUrl, this.form);
-          this.form = { name: '', email: '', age: '' };
-          this.getUsers();
         },
-        editUser(user) {
+        openCreate() {
+          this.isEdit = false;
+          this.currentId = null;
+          this.form = { name: '', email: '', age: null };
+          this.showModal = true;
+        },
+        openEdit(u) {
           this.isEdit = true;
-          this.editId = user._id;
-          this.form = { name: user.name, email: user.email, age: user.age };
+          this.currentId = u._id;
+          this.form = { name: u.name, email: u.email, age: u.age };
+          this.showModal = true;
+        },
+        closeModal() {
+          this.showModal = false;
+        },
+        async createUser() {
+          try {
+            await axios.post(this.apiUrl, this.form);
+            this.showModal = false;
+            this.notify('User berhasil ditambahkan');
+            this.fetchUsers();
+          } catch (e) {
+            this.notify(this.extractErr(e, 'Gagal menambah user'));
+          }
         },
         async updateUser() {
-          await axios.put(`${this.apiUrl}/${this.editId}`, this.form);
-          this.cancelEdit();
-          this.getUsers();
-        },
-        async deleteUser(id) {
-          if (confirm("Yakin hapus user ini?")) {
-            await axios.delete(`${this.apiUrl}/${id}`);
-            this.getUsers();
+          try {
+            await axios.put(`${this.apiUrl}/${this.currentId}`, this.form);
+            this.showModal = false;
+            this.notify('User berhasil diperbarui');
+            this.fetchUsers();
+          } catch (e) {
+            this.notify(this.extractErr(e, 'Gagal memperbarui user'));
           }
         },
-        cancelEdit() {
-          this.isEdit = false;
-          this.editId = null;
-          this.form = { name: '', email: '', age: '' };
+        confirmDelete(u) {
+          if (confirm(`Hapus user "${u.name}"?`)) {
+            this.deleteUser(u._id);
+          }
+        },
+        async deleteUser(id) {
+          try {
+            await axios.delete(`${this.apiUrl}/${id}`);
+            this.notify('User dihapus');
+            this.fetchUsers();
+          } catch (e) {
+            this.notify(this.extractErr(e, 'Gagal menghapus user'));
+          }
+        },
+        formatDate(d) {
+          if (!d) return '-';
+          const dt = new Date(d);
+          return dt.toLocaleString();
+        },
+        notify(msg) {
+          this.toast.message = msg;
+          this.toast.show = true;
+          setTimeout(() => (this.toast.show = false), 2200);
+        },
+        extractErr(e, fallback) {
+          try { return e.response.data.message || fallback; } catch { return fallback; }
         }
       }
     });
   </script>
+
+  <style>
+    /* simple fade for toast */
+    .fade-enter-active, .fade-leave-active { transition: opacity .2s; }
+    .fade-enter, .fade-leave-to { opacity: 0; }
+  </style>
 </body>
 </html>
