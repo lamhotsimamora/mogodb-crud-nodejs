@@ -1,3 +1,7 @@
+install package
+
+npm install express mongoose cors body-parser nodemon
+
 npm start
 
-http://localhost:1234
+Endpoint API : http://localhost:1234
